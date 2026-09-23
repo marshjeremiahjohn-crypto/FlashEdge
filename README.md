@@ -1,0 +1,2 @@
+# FlashEdge
+Arbitrage bot Advanced 
