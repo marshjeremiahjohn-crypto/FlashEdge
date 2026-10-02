@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: flashedge-api
+    runtime: python
+    rootDir: .
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: flash_arb_engine
+      - key: CORS_ORIGINS
+        sync: false
+      - key: BASE_MAINNET_RPC_URL
+        sync: false
+      - key: ARBITRUM_MAINNET_RPC_URL
+        sync: false
+      - key: BASE_SEPOLIA_RPC_URL
+        sync: false
+      - key: ARBITRUM_SEPOLIA_RPC_URL
+        sync: false
+
+  - type: web
+    name: flashedge-dashboard
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    staticPublishPath: build
+    envVars:
+      - key: REACT_APP_BACKEND_URL
+        sync: false
+      - key: REACT_APP_BASE_RPC
+        value: https://mainnet.base.org
+      - key: REACT_APP_ARBITRUM_RPC
+        value: https://arb1.arbitrum.io/rpc
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
