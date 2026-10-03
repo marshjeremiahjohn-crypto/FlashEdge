@@ -1,0 +1,32 @@
+* {
+    box-sizing: border-box;
+}
+
+html {
+    background: #0a0a0a;
+}
+
+::selection {
+    background: #007aff;
+    color: #ffffff;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+.font-heading {
+    font-family: "Chivo", sans-serif;
+}
+
+button,
+a,
+input,
+textarea {
+    transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+button:active,
+a:active {
+    transform: translateY(1px);
+}
