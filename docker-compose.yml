@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  scanner:
+    build:
+      context: ./scanner
+      dockerfile: Dockerfile
+    environment:
+      - BASE_RPC=${BASE_RPC:-https://mainnet.base.org}
+      - ARBITRUM_RPC=${ARBITRUM_RPC:-https://arb1.arbitrum.io/rpc}
+      - FLASH_ROUTER_BASE=${FLASH_ROUTER_BASE}
+      - FLASH_ROUTER_ARBITRUM=${FLASH_ROUTER_ARBITRUM}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - MIN_PROFIT_THRESHOLD=1.0
+      - MIN_LIQUIDITY=100000
+      - SCAN_INTERVAL=5000
+      - AUTO_EXECUTE=true
+    volumes:
+      - ./scanner/logs:/app/logs
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Use Portainer for monitoring
+  portainer:
+    image: portainer/portainer-ce:latest
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: unless-stopped
+
+volumes:
+  portainer_data:

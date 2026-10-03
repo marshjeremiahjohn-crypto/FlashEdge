@@ -1,70 +1,26 @@
-# Getting Started with Create React App
+# FlashEdge Smart Contracts
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This folder contains testnet-first Solidity scaffolding for the web app:
 
-## Available Scripts
+- `FlashArbitrageRouter.sol` — shared owner, pause, max trade safety controls, approved router allowlist, V2-style route execution, profit sweeping, and emergency withdrawal.
+- `BalancerFlashArb.sol` — Balancer Vault flash-loan receiver with approved-router swap route execution, repayment, and minimum-profit checks.
+- `UniswapV3FlashArb.sol` — Uniswap V3 flash callback receiver with approved-pool gating, approved-router route execution, repayment, and minimum-profit checks.
 
-In the project directory, you can run:
+Deploy the relevant contract to Base Sepolia, Arbitrum Sepolia, or Polygon Amoy, then paste the deployed address into the app's transaction builder. The app never stores private keys; execution is signed from MetaMask.
 
-### `npm start`
+Constructor signatures:
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```solidity
+new BalancerFlashArb(address balancerVault, uint256 maxTradeAmount, address profitRecipient)
+new UniswapV3FlashArb(uint256 maxTradeAmount, address profitRecipient)
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Route data format for V2-compatible routers:
 
-### `npm test`
+```solidity
+abi.encode(V2SwapStep[] steps, uint256 deadline)
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Each `V2SwapStep` contains `router`, `tokenIn`, `tokenOut`, and `amountOutMin`. Routers must be approved by the owner with `setRouterApproval(router, true)` before execution. Uniswap V3 flash pools must be approved with `setPoolApproval(pool, true)`.
 
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Before real liquidity use, run fork/testnet simulations, verify router/factory addresses, block taxed/honeypot tokens, and confirm the route ends in the borrowed token.
