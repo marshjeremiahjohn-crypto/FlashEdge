@@ -13,6 +13,7 @@ interface IUniswapV3PoolMinimal {
 /// @dev Testnet first. Approve pools and routers only after verification.
 contract UniswapV3FlashArb is FlashArbitrageRouter {
     mapping(address => bool) public approvedPools;
+    bytes32 private activeRequest;
 
     event PoolApprovalUpdated(address indexed pool, bool approved);
     event UniswapFlashRequested(address indexed pool, uint256 amount0, uint256 amount1, uint256 minProfitWei);
@@ -28,15 +29,28 @@ contract UniswapV3FlashArb is FlashArbitrageRouter {
 
     function executeUniswapV3FlashArb(address pool, uint256 amount0, uint256 amount1, uint256 minProfitWei, bytes calldata routeData) external onlyOwner whenActive {
         require(approvedPools[pool], "POOL_NOT_APPROVED");
-        require(amount0 == 0 || amount1 == 0, "ONE_SIDED_FLASH_ONLY");
+        require(activeRequest == bytes32(0), "FLASH_ACTIVE");
+        require((amount0 == 0) != (amount1 == 0), "ONE_SIDED_FLASH_ONLY");
         _validateTrade(amount0 + amount1, minProfitWei, routeData);
+
+        address token0 = IUniswapV3PoolMinimal(pool).token0();
+        address token1 = IUniswapV3PoolMinimal(pool).token1();
+        address borrowedToken = amount0 > 0 ? token0 : token1;
+        uint256 baselineBalance = _balanceOf(borrowedToken);
+        bytes memory data = abi.encode(pool, amount0, amount1, minProfitWei, baselineBalance, routeData);
+        activeRequest = keccak256(data);
+
         emit UniswapFlashRequested(pool, amount0, amount1, minProfitWei);
-        IUniswapV3PoolMinimal(pool).flash(address(this), amount0, amount1, abi.encode(pool, amount0, amount1, minProfitWei, routeData));
+        IUniswapV3PoolMinimal(pool).flash(address(this), amount0, amount1, data);
+        require(activeRequest == bytes32(0), "CALLBACK_MISSING");
     }
 
     function uniswapV3FlashCallback(uint256 fee0, uint256 fee1, bytes calldata data) external {
-        (address pool, uint256 amount0, uint256 amount1, uint256 minProfitWei, bytes memory routeData) = abi.decode(data, (address, uint256, uint256, uint256, bytes));
+        require(activeRequest != bytes32(0) && keccak256(data) == activeRequest, "INVALID_FLASH_REQUEST");
+        (address pool, uint256 amount0, uint256 amount1, uint256 minProfitWei, uint256 baselineBalance, bytes memory routeData) =
+            abi.decode(data, (address, uint256, uint256, uint256, uint256, bytes));
         require(msg.sender == pool && approvedPools[pool], "UNTRUSTED_POOL");
+        activeRequest = bytes32(0);
 
         address token0 = IUniswapV3PoolMinimal(pool).token0();
         address token1 = IUniswapV3PoolMinimal(pool).token1();
@@ -51,10 +65,10 @@ contract UniswapV3FlashArb is FlashArbitrageRouter {
         uint256 repayment0 = amount0 + fee0;
         uint256 repayment1 = amount1 + fee1;
         if (repayment0 > 0) {
-            _repayAndSweep(token0, pool, repayment0, borrowedToken == token0 ? minProfitWei : 0);
+            _repayAndSweepProfit(token0, pool, repayment0, borrowedToken == token0 ? minProfitWei : 0, borrowedToken == token0 ? baselineBalance : _balanceOf(token0) - repayment0);
         }
         if (repayment1 > 0) {
-            _repayAndSweep(token1, pool, repayment1, borrowedToken == token1 ? minProfitWei : 0);
+            _repayAndSweepProfit(token1, pool, repayment1, borrowedToken == token1 ? minProfitWei : 0, borrowedToken == token1 ? baselineBalance : _balanceOf(token1) - repayment1);
         }
         emit UniswapFlashRepaid(pool, repayment0, repayment1);
     }
