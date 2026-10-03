@@ -131,16 +131,24 @@ abstract contract FlashArbitrageRouter {
         return (currentToken, currentAmount);
     }
 
-    function _repayAndSweep(address token, address repayTo, uint256 repayment, uint256 minProfitWei) internal {
+    function _repayAndSweepProfit(
+        address token,
+        address repayTo,
+        uint256 repayment,
+        uint256 minProfitWei,
+        uint256 baselineBalance
+    ) internal {
         uint256 balance = _balanceOf(token);
-        require(balance >= repayment + minProfitWei, "INSUFFICIENT_PROFIT");
+        require(balance >= baselineBalance + repayment + minProfitWei, "INSUFFICIENT_PROFIT");
         if (repayment > 0) {
             _safeTransfer(token, repayTo, repayment);
         }
-        uint256 remaining = _balanceOf(token);
-        if (remaining > 0) {
-            _safeTransfer(token, profitRecipient, remaining);
-            emit ProfitSwept(token, profitRecipient, remaining);
+        uint256 postRepaymentBalance = _balanceOf(token);
+        require(postRepaymentBalance >= baselineBalance, "BASELINE_LOSS");
+        uint256 profit = postRepaymentBalance - baselineBalance;
+        if (profit > 0) {
+            _safeTransfer(token, profitRecipient, profit);
+            emit ProfitSwept(token, profitRecipient, profit);
         }
     }
 
