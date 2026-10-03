@@ -21,6 +21,25 @@ contract MockVault {
     function flashLoan(address, address[] calldata, uint256[] calldata, bytes calldata) external {}
 }
 
+contract MockToken {
+    mapping(address => uint256) public balanceOf;
+    function mint(address to, uint256 amount) external { balanceOf[to] += amount; }
+    function transfer(address to, uint256 amount) external returns (bool) {
+        require(balanceOf[msg.sender] >= amount, "BALANCE");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+    function approve(address, uint256) external pure returns (bool) { return true; }
+}
+
+contract SettlementHarness is FlashArbitrageRouter {
+    constructor(address recipient) FlashArbitrageRouter(0, recipient) {}
+    function settle(address token, address repayTo, uint256 repayment, uint256 minProfit, uint256 baseline) external {
+        _repayAndSweepProfit(token, repayTo, repayment, minProfit, baseline);
+    }
+}
+
 contract FlashEdgeSecurityTest {
     function testOwnerAndProfitRecipientInitialize() public {
         RouterHarness router = new RouterHarness(100 ether, address(0xBEEF));
@@ -87,6 +106,49 @@ contract FlashEdgeSecurityTest {
         bytes memory data = abi.encode(address(0x9999), uint256(1), uint256(0), uint256(0), bytes(""));
         (bool ok,) = address(arb).call(abi.encodeCall(arb.uniswapV3FlashCallback, (0, 0, data)));
         require(!ok, "unapproved pool callback");
+    }
+
+    function testSettlementPreservesPreexistingBalance() public {
+        address recipient = address(0xBEEF);
+        address lender = address(0xCAFE);
+        MockToken token = new MockToken();
+        SettlementHarness router = new SettlementHarness(recipient);
+
+        token.mint(address(router), 150);
+        router.settle(address(token), lender, 20, 30, 100);
+
+        require(token.balanceOf(address(router)) == 100, "baseline swept");
+        require(token.balanceOf(lender) == 20, "repayment");
+        require(token.balanceOf(recipient) == 30, "profit");
+    }
+
+    function testSettlementRejectsUsingBaselineAsProfit() public {
+        MockToken token = new MockToken();
+        SettlementHarness router = new SettlementHarness(address(0xBEEF));
+        token.mint(address(router), 120);
+        (bool ok,) = address(router).call(
+            abi.encodeCall(router.settle, (address(token), address(0xCAFE), uint256(20), uint256(1), uint256(100)))
+        );
+        require(!ok, "baseline counted as profit");
+    }
+
+    function testBalancerRejectsCallbackWithoutActiveRequest() public {
+        MockVault vault = new MockVault();
+        BalancerFlashArb arb = new BalancerFlashArb(address(vault), 100, address(this));
+        address[] memory tokens = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+        uint256[] memory fees = new uint256[](1);
+        tokens[0] = address(0x1111);
+        amounts[0] = 1;
+        bytes memory data = abi.encode(tokens[0], uint256(1), uint256(0), uint256(0), bytes(""));
+        (bool ok,) = address(vault).call(
+            abi.encodeWithSignature("noop()")
+        );
+        ok;
+        (bool callbackOk,) = address(arb).call(
+            abi.encodeCall(arb.receiveFlashLoan, (tokens, amounts, fees, data))
+        );
+        require(!callbackOk, "inactive callback accepted");
     }
 
     function testFuzzTradeLimit(uint96 amount) public {
